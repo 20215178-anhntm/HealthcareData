@@ -1,0 +1,94 @@
+version: "3.7"
+
+services:
+  postgres:
+    image: postgres:15
+    container_name: superset_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: superset
+      POSTGRES_PASSWORD: superset
+      POSTGRES_DB: superset
+    ports:
+      - "5432:5432"
+    volumes:
+      - superset_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U superset"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - bigdata
+
+  duckdb_builder:
+    image: python:3.11
+    container_name: duckdb_builder
+    restart: "no"
+    env_file:
+      - .env
+    environment:
+      MINIO_ENDPOINT: ${MINIO_ENDPOINT}
+      MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY}
+      MINIO_SECRET_KEY: ${MINIO_SECRET_KEY}
+      S3_BUCKET_SILVER: ${S3_BUCKET_SILVER}
+    volumes:
+      - ./duckdb_data:/data # output file silver.duckdb
+      - ../src/scripts:/scripts # script folder
+    command: >
+      sh -c "
+        pip install --no-cache-dir duckdb pandas pymongo python-dotenv &&
+        echo '--- Building silver.duckdb from MinIO ---' &&
+        python /scripts/build_duckdb.py &&
+        echo '--- Syncing MongoDB → DuckDB ---' &&
+        python /scripts/sync_mongo_duckdb.py
+      "
+    networks:
+      - bigdata
+
+  superset:
+    image: apache/superset:latest
+    container_name: superset
+    restart: unless-stopped
+    environment:
+      SUPERSET_SECRET_KEY: "RVhFXmZrQlZjQlFkbEtCa1RHT3FkR25YZExWd1Z3dm1FVHRJQm9Zb2REeg=="
+      SUPERSET_ADMIN_USERNAME: "admin"
+      SUPERSET_ADMIN_PASSWORD: "admin"
+      SUPERSET_LOAD_EXAMPLES: "no"
+      SQLALCHEMY_DATABASE_URI: postgresql+psycopg2://superset:superset@postgres:5432/superset
+    ports:
+      - "8088:8088"
+    volumes:
+      - superset_home:/app/superset_home
+      - superset_logs:/app/superset_logs
+      - ./duckdb_data:/app/data
+    depends_on:
+      postgres:
+        condition: service_healthy
+    command: >
+      bash -c "pip install duckdb duckdb-engine &&
+               superset db upgrade &&
+               superset fab create-admin --username admin --password admin --firstname Superset --lastname Admin --email admin@example.com &&
+               superset init &&
+               superset run -p 8088 --host 0.0.0.0"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8088/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 40s
+    networks:
+      - bigdata
+
+volumes:
+  superset_home:
+  superset_logs:
+  superset_pgdata:
+  duckdb_data:
+
+networks:
+  bigdata:
+    external: true
+# SQLAlchemy URI on UI Superset should be: duckdb:////app/data/silver.duckdb
+# duckdb:////app/data/mongo_to_duckdb.duckdb
+

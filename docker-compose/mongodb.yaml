@@ -1,0 +1,37 @@
+version: "3.7"
+
+services:
+  mongo:
+    image: mongo:6.0
+    container_name: mongodb
+    restart: unless-stopped
+    ports:
+      - "27018:27017"
+    command: >
+      bash -c "openssl rand -base64 756 > /tmp/mongo-keyfile && 
+      chmod 400 /tmp/mongo-keyfile && 
+      chown mongodb:mongodb /tmp/mongo-keyfile &&
+      exec docker-entrypoint.sh mongod --replSet rs0 --bind_ip_all --keyFile /tmp/mongo-keyfile"
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: admin
+      MONGO_INITDB_ROOT_PASSWORD: admin
+      MONGO_INITDB_DATABASE: healthcare
+    volumes:
+      - ./mongo_data:/data/db
+      - ./mongo-keyfile:/data/mongo-keyfile:ro
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand({ ping: 1 })"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    networks:
+      - bigdata
+
+volumes:
+  mongo_data:
+    driver: local
+
+networks:
+  bigdata:
+    external: true

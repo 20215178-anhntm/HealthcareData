@@ -1,0 +1,32 @@
+version: "3.7"
+services:
+  minio:
+    image: quay.io/minio/minio
+    container_name: minio
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    environment:
+      MINIO_ROOT_USER: root_admin
+      MINIO_ROOT_PASSWORD: root_admin
+      # MINIO_DEFAULT_BUCKET: local-storage
+    volumes:
+      - minio_data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 30s # kiểm tra mỗi 30 giây
+      timeout: 5s # chờ tối đa 5 giây cho mỗi lần test
+      retries: 3 # sau 3 lần fail → unhealthy
+      start_period: 20s # đợi 20 giây cho container khởi động trước khi check
+    networks:
+      - bigdata
+
+volumes:
+  minio_data:
+    driver: local
+
+networks:
+  bigdata:
+    external: true

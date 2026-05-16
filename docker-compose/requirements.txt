@@ -1,0 +1,9 @@
+pandas
+numpy
+pyspark==3.5.1
+kafka-python
+minio
+python-dotenv
+pymongo
+pyarrow
+boto3

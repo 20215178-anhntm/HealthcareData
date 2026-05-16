@@ -1,0 +1,94 @@
+version: "3.7"
+
+services:
+  spark-master:
+    image: apache/spark:3.5.1
+    container_name: spark-master
+    environment:
+      # Giữ tiến trình foreground để container không exit
+      - SPARK_NO_DAEMONIZE=1
+      # Tuỳ chọn cho Master (bật REST API, tăng timeout worker nếu muốn)
+      - SPARK_MASTER_OPTS=-Dspark.master.rest.enabled=true -Dspark.worker.timeout=120
+    command: ["/bin/bash", "-lc", "/opt/spark/sbin/start-master.sh -h 0.0.0.0"]
+    ports:
+      - "8080:8080" # Spark Master Web UI
+      - "7077:7077" # Spark Master RPC
+      - "6066:6066" # (tuỳ chọn) REST submit
+    volumes:
+      - ./spark-apps:/opt/spark-apps # nơi để .py/.jar submit
+      - ./spark-data:/opt/spark-data # dữ liệu/luồng tạm
+    cpus: "1.0" # ~1 vCPU
+    mem_limit: "1g" # 1 GB RAM
+    networks:
+      - bigdata
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8080"]
+      interval: 15s
+      timeout: 5s
+      retries: 8
+      start_period: 30s
+
+  spark-worker-1:
+    image: apache/spark:3.5.1
+    container_name: spark-worker-1
+    environment:
+      - SPARK_NO_DAEMONIZE=1
+      # cấu hình port/UI riêng qua -D (image apache/spark không hiểu biến kiểu Bitnami)
+      - SPARK_WORKER_OPTS=-Dspark.worker.ui.port=8081 -Dspark.worker.port=7078
+    command:
+      [
+        "/bin/bash",
+        "-lc",
+        "/opt/spark/sbin/start-worker.sh spark://spark-master:7077",
+      ]
+    depends_on:
+      - spark-master
+    ports:
+      - "8081:8081" # Worker Web UI
+    volumes:
+      - ./spark-apps:/opt/spark-apps
+      - ./spark-data:/opt/spark-data
+    cpus: "2.0" # tối đa 2 vCPU
+    mem_limit: "3g" # tối đa 3 GB RAM (>= 2G để dư cho daemon/overhead)
+    networks:
+      - bigdata
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8081"]
+      interval: 15s
+      timeout: 5s
+      retries: 8
+      start_period: 30s
+
+  spark-worker-2:
+    image: apache/spark:3.5.1
+    container_name: spark-worker-2
+    environment:
+      - SPARK_NO_DAEMONIZE=1
+      - SPARK_WORKER_OPTS=-Dspark.worker.ui.port=8082 -Dspark.worker.port=7079
+    command:
+      [
+        "/bin/bash",
+        "-lc",
+        "/opt/spark/sbin/start-worker.sh spark://spark-master:7077",
+      ]
+    depends_on:
+      - spark-master
+    ports:
+      - "8082:8082"
+    volumes:
+      - ./spark-apps:/opt/spark-apps
+      - ./spark-data:/opt/spark-data
+    cpus: "2.0" # tối đa 2 vCPU
+    mem_limit: "3g" # tối đa 3 GB RAM (>= 2G để dư cho daemon/overhead)
+    networks:
+      - bigdata
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8082"]
+      interval: 15s
+      timeout: 5s
+      retries: 8
+      start_period: 30s
+
+networks:
+  bigdata:
+    external: true
