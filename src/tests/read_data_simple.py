@@ -17,6 +17,8 @@ from src.common.config import SETTINGS
 
 
 BRONZE_DATASETS = ["patients", "insurance", "diabetes", "noshows"]
+GOLD_KPIS = ["kpi_cost_by_gender", "kpi_cost_by_condition",
+             "kpi_test_results_by_condition", "kpi_diabetes_by_age_group"]
 
 
 def read_bronze(spark):
@@ -50,7 +52,8 @@ def main():
         elif layer == "silver":
             read_layer(spark, f"s3a://{SETTINGS.bucket_silver}/data/", "Silver")
         elif layer == "gold":
-            read_layer(spark, f"s3a://{SETTINGS.bucket_gold}/data/", "Gold")
+            for kpi in GOLD_KPIS:
+                read_layer(spark, f"s3a://{SETTINGS.bucket_gold}/{kpi}/", f"Gold/{kpi}")
         elif layer == "quarantine":
             for ds in BRONZE_DATASETS:
                 path = f"s3a://{SETTINGS.bucket_bronze}/quarantine/{ds}/"
