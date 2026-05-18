@@ -45,7 +45,7 @@ class HealthcareSchemas:
             StructField("BMI", DoubleType(), True),
             StructField("DiabetesPedigreeFunction", DoubleType(), True),
             StructField("Age", IntegerType(), True),
-            StructField("Outcome", BooleanType(), True),
+            StructField("Outcome", IntegerType(), True),
         ])
     
     @staticmethod

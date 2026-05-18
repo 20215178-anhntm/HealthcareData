@@ -94,6 +94,9 @@ class BronzeToSilver:
             p = self._drop_metadata(p)
             if "bmi" in p.columns:
                 p = p.withColumnRenamed("bmi", "bmi_patients")
+            # Chuẩn hóa gender về lowercase để join khớp với insurance/noshows
+            if "gender" in p.columns:
+                p = p.withColumn("gender", lower(col("gender")))
 
             # ── Insurance channel: aggregate theo age+gender trước khi join ───
             # Tránh cartesian explosion: 55K patients × 1.3K insurance = hàng triệu rows
@@ -101,6 +104,9 @@ class BronzeToSilver:
             if ins is not None:
                 ins = self._safe_rename(ins, "sex", "gender")
                 ins = self._drop_metadata(ins)
+                # insurance dùng lowercase (male/female) — đảm bảo nhất quán
+                if "gender" in ins.columns:
+                    ins = ins.withColumn("gender", lower(col("gender")))
                 ins_agg = ins.groupBy("age", "gender").agg(
                     avg("charges").alias("avg_insurance_charge"),
                     avg("bmi").alias("avg_bmi_insurance"),
@@ -116,7 +122,7 @@ class BronzeToSilver:
                     avg("glucose").alias("avg_glucose"),
                     avg("bmi").alias("avg_bmi_lab"),
                     avg("insulin").alias("avg_insulin"),
-                    avg(when(col("outcome") == True, 1.0).otherwise(0.0))
+                    avg(when(col("outcome") == 1, 1.0).otherwise(0.0))
                         .alias("diabetes_positive_rate"),
                     count("*").alias("lab_channel_size"),
                 )
@@ -126,6 +132,13 @@ class BronzeToSilver:
             # ── Appointment channel: aggregate theo age+gender ────────────────
             if nos is not None:
                 nos = self._drop_metadata(nos)
+                if "gender" in nos.columns:
+                    # noshows dùng "F"/"M", chuẩn hóa về "female"/"male" để join khớp với patients
+                    nos = nos.withColumn("gender",
+                        when(lower(col("gender")) == lit("f"), lit("female"))
+                        .when(lower(col("gender")) == lit("m"), lit("male"))
+                        .otherwise(lower(col("gender")))
+                    )
                 nos_agg = nos.groupBy("age", "gender").agg(
                     avg(when(col("showed_up") == True, 1.0).otherwise(0.0))
                         .alias("appointment_show_rate"),
